@@ -1,0 +1,366 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <style>
+    /* Styles from the first HTML */
+    body, html {
+      height: 100%;
+      margin: 0;
+      background-color: #8894a1;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      flex-direction: column;
+      position: relative; /* Added to make sure the button stays in the left corner */
+    }
+
+    h1 {
+      margin-top: 0;
+      position: fixed;
+      top: 0;
+      width: 100%;
+      text-align: center;
+      background-color: #a68bea;
+      padding: 10px 0;
+    }
+
+    .led-container {
+      perspective: 800px;
+      perspective-origin: 50% 50%;
+      display: flex; /* Added to make the LED container a flex container */
+      justify-content: center; /* Center the button horizontally */
+      margin-top: 5px; /* Adjusted margin to make space for the title and button */
+      position: relative; /* Added to make the button's position relative to the LED container */
+      
+    }
+
+    .led-grid {
+      transform-style: preserve-3d;
+      transition: transform 0.5s;
+      
+    }
+
+    .led {
+      width: 30px;
+      height: 30px;
+      border-radius: 50%; /* Make the LED a circle */
+      display: inline-block;
+      border: 1px solid #ccc;
+      margin: 50px;
+      cursor: pointer;
+      position: absolute;
+
+    }
+
+    #colorPickerContainer {
+      position: fixed;
+      top: 10px;
+      right: 10px;
+    }
+
+    #turnOffButton {
+      padding: 10px 20px;
+      background-color: #065032;
+      color: #ffffff;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+      position: fixed;
+      top: 10px;
+      left: 3px; /* Adjusted to position the button in the top left corner */
+    }
+
+    #coordinatesContainer {
+      position: fixed;
+      top: 80px;
+      left: 10px;
+      display: flex;
+      flex-direction: column;
+    }
+
+    #planeContainer {
+      position: fixed;
+      top: 300px;
+      left: 10px;
+      display: flex;
+      flex-direction: column;
+    }
+    #liveStream {
+      width: 100%;
+      height: 480px; /* Adjust height as needed */
+      top: 30px;
+      left: 100px;
+      border: none;
+    }
+    /* End of styles from the first HTML */
+
+    /* Styles from the second HTML */
+    /* Add any styles specific to the second HTML here */
+    /* End of styles from the second HTML */
+  </style>
+  <title>LED Box Control</title>
+</head>
+<body>
+  <h1>LED Box Control</h1>
+  <h1>Click on an LED to toggle it on/off and set its color. Drag with the mouse to rotate the box.</h1>
+  <iframe id="liveStream" src="http://192.168.0.108/"></iframe>
+  <div id="colorPickerContainer">
+    <input type="color" id="colorPicker" value="#ff0000">
+  </div>
+  
+  <div class="led-container" id="ledContainer">
+    <div class="led-grid" id="ledGrid"></div>
+  </div>
+  
+  <button id="turnOffButton">Turn Off All LEDs</button>
+  
+  <div id="coordinatesContainer">
+    Turn On Leds by select coordinate:
+    <label for="xInput">X:</label>
+    <input type="number" id="xInput" min="0" max="6" value="0">
+    <label for="yInput">Y:</label>
+    <input type="number" id="yInput" min="0" max="6" value="0">
+    <label for="zInput">Z:</label>
+    <input type="number" id="zInput" min="0" max="6" value="0">
+    <button id="setLEDButton">Set LED</button>
+  </div>
+  
+  <div id="planeContainer">
+    Turn On Leds in specific Plane:
+    <label for="xPlaneInput">X Plane:</label>
+    <input type="number" id="xPlaneInput" min="0" max="6" value="0">
+    <button id="turnOnXPlaneButton">Turn On X Plane</button>
+    <label for="yPlaneInput">Y Plane:</label>
+    <input type="number" id="yPlaneInput" min="0" max="6" value="0">
+    <button id="turnOnYPlaneButton">Turn On Y Plane</button>
+    <label for="zPlaneInput">Z Plane:</label>
+    <input type="number" id="zPlaneInput" min="0" max="6" value="0">
+    <button id="turnOnZPlaneButton">Turn On Z Plane</button>
+  </div>
+  
+  <!-- Buttons for animations -->
+  <div id="animationButtons">
+    Animation Buttons
+
+    :
+
+    <button id="colorCycleButton">Color Cycle</button>
+    
+    <button id="rainbowButton">Rainbow</button>
+
+    <button id="theaterChaseButton">Theater Chase</button>
+
+    <button id="fadeButton">Fade</button>
+
+    <button id="sparkleButton">Sparkle</button>
+  </div>
+
+  <script>
+    const ipAddress = "192.168.0.164"; // Replace with ESP32 IP address
+
+    // Animation button event listeners
+    document.getElementById("colorCycleButton").addEventListener("click", () => {
+      executeAnimation("/color_cycle");
+    });
+
+    document.getElementById("rainbowButton").addEventListener("click", () => {
+      executeAnimation("/rainbow");
+    });
+
+    document.getElementById("theaterChaseButton").addEventListener("click", () => {
+      executeAnimation("/theater_chase");
+    });
+
+    document.getElementById("fadeButton").addEventListener("click", () => {
+      executeAnimation("/fade");
+    });
+
+    document.getElementById("sparkleButton").addEventListener("click", () => {
+      executeAnimation("/sparkle");
+    });
+
+    function executeAnimation(endpoint) {
+      fetch(`http://${ipAddress}${endpoint}`, {
+        method: "POST",
+      })
+        .then((response) => {
+          if (!response.ok) {
+            throw new Error("Failed to execute animation");
+          }
+          console.log(`Animation executed: ${endpoint}`);
+        })
+        .catch((error) => {
+          console.error("Error executing animation:", error);
+        });
+    }
+
+    let isDragging = false;
+    let prevX = 0;
+    let prevY = 0;
+    let rotX = 0;
+    let rotY = 0;
+    let selectedColor = '#ff0000'; // Default color
+
+    function setLED(x, y, z, r, g, b) {
+      // Send an HTTP POST request to the ESP32 server to toggle the LED and set its color
+      fetch(`http://${ipAddress}/toggle_led?x=${x}&y=${y}&z=${z}&r=${r}&g=${g}&b=${b}`, {
+        method: 'POST',
+      })
+      .then(response => {
+        if (!response.ok) {
+          throw new Error('Failed to toggle LED');
+        }
+      })
+      .catch(error => {
+        console.error('Error toggling LED:', error);
+      });
+    }
+
+    function turnOnPlane(axis, plane) {
+      const color = selectedColor.substring(1); // Remove the "#" from the color code
+      fetch(`http://${ipAddress}/turn_on_plane?axis=${axis}&plane=${plane}&r=${parseInt(color.slice(0, 2), 16)}&g=${parseInt(color.slice(2, 4), 16)}&b=${parseInt(color.slice(4, 6), 16)}`, {
+        method: 'POST',
+      })
+      .then(response => {
+        if (!response.ok) {
+          throw new Error('Failed to turn on plane');
+        }
+        // Update LEDs on the web
+        const leds = document.querySelectorAll('.led');
+        leds.forEach(led => {
+          const pos = led.style.transform.match(/-?\d+/g);
+          if (pos) {
+            const [x, y, z] = pos.map(Number);
+            if (axis === 'x' && x === plane) {
+              led.style.backgroundColor = selectedColor; // Set LED to the specified color
+            }
+          }
+        });
+      })
+      .catch(error => {
+        console.error('Error turning on plane:', error);
+      });
+    }
+
+    // Create the LED grid
+    const ledContainer = document.getElementById('ledContainer');
+    const ledGrid = document.getElementById('ledGrid');
+    for (let z = 0; z < 7; z++) {
+      for (let y = 0; y < 7; y++) {
+        for (let x = 0; x < 7; x++) {
+          const led = document.createElement('div');
+          led.classList.add('led');
+          led.style.backgroundColor = 'rgb(0, 0, 0)';
+          led.style.transform = `translate3d(${x * 40}px, ${y * 40}px, ${z * 40}px)`;
+          led.onclick = () => {
+            const currentColor = led.style.backgroundColor;
+            if (currentColor === selectedColor) {
+              setLED(x, y, z, 0, 0, 0); // Turn off the LED
+              led.style.backgroundColor = 'rgb(0, 0, 0)';
+            } else {
+              const rgb = hexToRgb(selectedColor);
+              setLED(x, y, z, rgb.r, rgb.g, rgb.b); // Turn on the LED with selected color
+              led.style.backgroundColor = selectedColor;
+            }
+          };
+          ledGrid.appendChild(led);
+        }
+      }
+    }
+
+    // Mouse event handlers for rotating the LED box
+    ledContainer.addEventListener('mousedown', e => {
+      isDragging = true;
+      prevX = e.clientX;
+      prevY = e.clientY;
+    });
+
+    window.addEventListener('mouseup', () => {
+      isDragging = false;
+    });
+
+    window.addEventListener('mousemove', e => {
+      if (isDragging) {
+        const deltaX = e.clientX - prevX;
+        const deltaY = e.clientY - prevY;
+        rotX += deltaY * 0.5;
+        rotY += deltaX * 0.5;
+        ledGrid.style.transform = `rotateX(${rotX}deg) rotateY(${rotY}deg)`;
+        prevX = e.clientX;
+        prevY = e.clientY;
+      }
+    });
+
+    // Color picker event listener
+    const colorPicker = document.getElementById('colorPicker');
+    colorPicker.addEventListener('input', (event) => {
+      selectedColor = event.target.value;
+    });
+
+    function hexToRgb(hex) {
+      // Convert a hexadecimal color string to RGB object
+      const bigint = parseInt(hex.slice(1), 16);
+      const r = (bigint >> 16) & 255;
+      const g = (bigint >> 8) & 255;
+      const b = bigint & 255;
+      return { r, g, b };
+    }
+
+    // Set LED Button Event Listener
+    const setLEDButton = document.getElementById('setLEDButton');
+    setLEDButton.addEventListener('click', () => {
+      const x = parseInt(document.getElementById('xInput').value);
+      const y = parseInt(document.getElementById('yInput').value);
+      const z = parseInt(document.getElementById('zInput').value);
+      const rgb = hexToRgb(selectedColor);
+      setLED(x, y, z, rgb.r, rgb.g, rgb.b); // Set the LED with selected color
+    });
+
+    // Turn On X Plane Button Event Listener
+    const turnOnXPlaneButton = document.getElementById('turnOnXPlaneButton');
+    turnOnXPlaneButton.addEventListener('click', () => {
+      const xPlane = parseInt(document.getElementById('xPlaneInput').value);
+      turnOnPlane("x", xPlane);
+    });
+
+    // Turn On Y Plane Button Event Listener
+    const turnOnYPlaneButton = document.getElementById('turnOnYPlaneButton');
+    turnOnYPlaneButton.addEventListener('click', () => {
+      const yPlane = parseInt(document.getElementById('yPlaneInput').value);
+      turnOnPlane("y", yPlane);
+    });
+
+    // Turn On Z Plane Button Event Listener
+    const turnOnZPlaneButton = document.getElementById('turnOnZPlaneButton');
+    turnOnZPlaneButton.addEventListener('click', () => {
+      const zPlane = parseInt(document.getElementById('zPlaneInput').value);
+      turnOnPlane("z", zPlane);
+    });
+
+    // Turn Off All LEDs Button Event Listener
+    const turnOffButton = document.getElementById('turnOffButton');
+    turnOffButton.addEventListener('click', () => {
+      fetch(`http://${ipAddress}/turn_off_all_leds`, {
+        method: 'POST',
+      })
+      .then(response => {
+        if (!response.ok) {
+          throw new Error('Failed to turn off LEDs');
+        }
+        // Set all LEDs to black on the web
+        const leds = document.querySelectorAll('.led');
+        leds.forEach(led => {
+          led.style.backgroundColor = '#000'; // Set all LEDs to black
+        });
+        // Reload the page
+        location.reload();
+      })
+      .catch(error => {
+        console.error('Error turning off LEDs:', error);
+      });
+    });
+  </script>
+</body>
+</html>
