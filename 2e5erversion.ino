@@ -1,13 +1,12 @@
-#include <FastLED.h> // Include the FastLED library
-#include <WiFi.h>    // Include the WiFi library
+#include <FastLED.h>
+#include <WiFi.h>
 #include <WebServer.h>
 
-#define NUM_LEDS 343 // Total number of LEDs in the box (7x7x7)
-#define DATA_PIN 33  // GPIO pin connected to the LED box
+#define NUM_LEDS 343
+#define DATA_PIN 33
 
-CRGB leds[NUM_LEDS]; // Declare an array of CRGB LEDs
+CRGB leds[NUM_LEDS];
 
-// LED coordinates
 int ledCoords[343][3] = {
   {0, 0, 0}, {0, 0, 1}, {0, 0, 2}, {0, 0, 3}, {0, 0, 4}, {0, 0, 5}, {0, 0, 6},
   {0, 1, 6}, {0, 1, 5}, {0, 1, 4}, {0, 1, 3}, {0, 1, 2}, {0, 1, 1}, {0, 1, 0},
@@ -69,7 +68,7 @@ int ledCoords[343][3] = {
 const char* ssid = "Tenda_277850";
 const char* password = "naJGnH2j";
 
-WebServer server(80);
+WebServer server(8080);
 
 void setup() {
   Serial.begin(115200);
@@ -80,23 +79,23 @@ void setup() {
     delay(1000);
     Serial.println("Connecting to WiFi...");
   }
-  Serial.println("Connected to WiFi");
+  
+  // Print ESP32 IP address to Serial Monitor
+  Serial.print("Connected to WiFi. IP address: ");
+  Serial.println(WiFi.localIP());
 
   // Set up LED strip
   FastLED.addLeds<NEOPIXEL, DATA_PIN>(leds, NUM_LEDS);
 
-  // Route for animations
+  // Routes for animations
+  server.on("/", HTTP_GET, handleRoot);
   server.on("/color_cycle", HTTP_POST, colorCycle);
   server.on("/rainbow", HTTP_POST, rainbow);
   server.on("/theater_chase", HTTP_POST, theaterChase);
   server.on("/fade", HTTP_POST, fade);
   server.on("/sparkle", HTTP_POST, sparkle);
-
-  // Routes for LED control
   server.on("/toggle_led", HTTP_POST, toggleLED);
   server.on("/turn_off_all_leds", HTTP_POST, turnOffAllLEDs);
-  
-  // Use lambda function as the handler for turn_on_plane
   server.on("/turn_on_plane", HTTP_POST, [](){
     turnOnPlane();
   });
@@ -105,9 +104,52 @@ void setup() {
   Serial.println("HTTP server started");
 }
 
+
 void loop() {
   server.handleClient();
 }
+
+void handleRoot() {
+
+  String html = "<!DOCTYPE html>";
+  html += "<html>";
+  html += "<head>";
+  html += "<title>3D Matrix LED Box Experient</title>";
+  html += "</head>";
+  html += "<body style='background-color: yellow;'>"; // Set background color to green
+  html += "<h1>3D Matrix LED Box Experient</h1>";
+  html += "<form action='/turn_off_all_leds' method='post'><button type='submit'>Turn Off All LEDs</button></form>";
+      html += "<h3>                        </h3>";
+  html += "<img src=\"https://f8171bde27de.ngrok.app \" width=\"300\" height=\"200\">";
+    html += "<h2>                        </h2>";
+    html += "<h2>Animations application (after each animation you need to turn Off all leds):</h2>";
+  html += "<form action='/color_cycle' method='post'><button type='submit'>Color Cycle</button></form>";
+  html += "<form action='/rainbow' method='post'><button type='submit'>Rainbow</button></form>";
+  html += "<form action='/theater_chase' method='post'><button type='submit'>Theater Chase</button></form>";
+  html += "<form action='/fade' method='post'><button type='submit'>Fade</button></form>";
+  html += "<form action='/sparkle' method='post'><button type='submit'>Sparkle</button></form>";
+      html += "<h4>                        </h4>";
+      html += "<h2>set led and turn it on with specific color:</h2>";
+      html += "<h4>Here you need to fill all informations</h4>"; 
+            html += "<h4>for example led (0,0,0) RGB(255,0,0) the led it will be turn On with the Red color</h4>";     
+  html += "<form action='/toggle_led' method='post'><button type='submit'>Turn On/Off Single LED</button>";
+  html += "<label for='x'>X:</label><input type='number' name='x' min='0' max='6'>";
+  html += "<label for='y'>Y:</label><input type='number' name='y' min='0' max='6'>";
+  html += "<label for='z'>Z:</label><input type='number' name='z' min='0' max='6'>";
+  html += "<label for='r'>Red:</label><input type='number' name='r' min='0' max='255'>";
+  html += "<label for='g'>Green:</label><input type='number' name='g' min='0' max='255'>";
+  html += "<label for='b'>Blue:</label><input type='number' name='b' min='0' max='255'>";
+  
+  html += "</form>";
+  
+  
+  html += "</body>";
+  html += "</html>";
+
+  server.send(200, "text/html", html);
+  
+}
+
 
 void colorCycle() {
   for (int i = 0; i < 256; i++) {
@@ -231,4 +273,9 @@ void turnOnPlane(char axis, int plane, int g, int r, int b) {
     }
   }
   FastLED.show();
+}
+void turnOnAllLEDs() {
+  fill_solid(leds, NUM_LEDS, CRGB::White); // or any other color you prefer
+  FastLED.show();
+  server.send(200, "text/plain", "All LEDs turned on");
 }
